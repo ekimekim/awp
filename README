@@ -1,0 +1,13 @@
+
+The Auto Weighted Player is an attempt to make a music player
+that brings up your favourite songs more often, and ones that
+you skip less often. The interface isn't really fleshed out yet,
+but the core concept is that you have a playlist where each song
+has a weighting, and songs are chosen randomly according to that weighting.
+
+The playlist file has the following format:
+WEIGHT (float) \t VOLUME (0. - 1.) \t PATH
+Each line is an entry, and ordering is ignored.
+
+This project makes use of the excellent gevent library for python (http://gevent.org),
+as well as baudm's mplayer.py library (http://github.com/baudm/mplayer.py).
