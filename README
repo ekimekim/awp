@@ -11,3 +11,6 @@ Each line is an entry, and ordering is ignored.
 
 This project makes use of the excellent gevent library for python (http://gevent.org),
 as well as baudm's mplayer.py library (http://github.com/baudm/mplayer.py).
+
+This project IS NOT IN A WORKING STATE YET. In particular, the Playlist works fine
+but the actual playing in mplayer still has a ways to go.
