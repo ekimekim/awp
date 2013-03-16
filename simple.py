@@ -1,0 +1,172 @@
+
+"""This module uses the existing mplayer interface instead of making a new one.
+
+The advantage is a saving of effort, and exposure of all available information
+and controls.
+
+We still have to code commands that edit the playlist ourselves, mainly by intercepting
+keystrokes. As such it is less self-documenting (lacking a clear menu system).
+
+Some minor gripes: The latency between a song finishing and the next starting is higher,
+due to creating a new process every time.
+
+In less concrete terms, this solution is "hacky" and possibly less reliable.
+"""
+
+from subprocess import Popen, PIPE, STDOUT
+import gevent
+from gevent.fileobject import FileObject
+from signal import SIGCHLD
+import os, sys
+import errno
+
+from readesc import readesc
+from escapes import CLEAR
+from playlist import Playlist
+
+
+class RaiseOnExit(object):
+	"""Allows an exception to be raised upon a child exit.
+	Usage:
+		proc = Popen(...)
+		try:
+			with RaiseOnExit(proc):
+				...
+		except RaiseOnExit.ChildExited:
+			# proc is dead
+		# exception will never occur here
+	"""
+
+	class ChildExited(Exception): pass
+
+	def __init__(self, child, g_target=None, exception=ChildExited):
+		"""Pass in a greenlet g_target and a Popen object child.
+		When child exits, exception is raised in g_target.
+		exception defaults to RaiseOnExit.ChildExited.
+		g_target defaults to current greenlet at init time.
+		"""
+		self.g_target = g_target or gevent.getcurrent()
+		self.child = child
+		self.exception = exception
+
+	def child_handler(self, watcher):
+		# May run in hub
+		open('/tmp/log', 'a').write('watcher trigger: %d %s\n' % (self.child.pid, watcher))
+		if self.child.poll() is not None:
+			gevent.spawn(lambda: self.g_target.throw(self.exception))
+		else:
+			open('/tmp/log', 'a').write('false alarm?\n')
+			if watcher:
+				open('/tmp/log', 'a').write('poll(): {}\nPROC:\n{}\n'.format(
+					self.child.poll(),
+					open('/proc/%s/stat' % self.child.pid).read() if os.path.exists('/proc/%s/stat' % self.child.pid) else 'NO EXIST'
+				))
+				open('/tmp/log', 'a').write('and again: %s\n' % self.child.poll())
+				open('/tmp/log', 'a').write(os.waitpid(self.child.pid, os.WNOHANG))
+
+	def __enter__(self):
+		# gevent.signal doesn't work for SIGCHLD...
+		open('/tmp/log', 'a').write('watcher start for %d\n' % self.child.pid)
+		self.watcher = gevent.hub.get_hub().loop.child(self.child.pid)
+		self.watcher.start(self.child_handler, self.watcher)
+		self.child_handler(None) # guard against race (child died before signal was setup)
+
+	def __exit__(self, *exc_info):
+		open('/tmp/log', 'a').write('watcher stop\n')
+		self.watcher.stop()
+
+
+def play(playlist, stdin=None, stdout=None):
+	"""Takes a Playlist and plays forever.
+	Controls (in addition to mplayer standard controls):
+		q: Skip and demote.
+		f: Promote.
+		d: Demote without skipping
+		Q: Quit.
+	All promotions and demotions double/halve the weighting.
+	"""
+	# TODO sys.stdin raw mode
+
+	if not stdin: stdin = FileObject(sys.stdin, bufsize=0, close=False)
+	if not stdout: stdout = FileObject(sys.stdout, bufsize=0, close=False)
+
+	if isinstance(playlist, str): playlist = Playlist(playlist)
+
+	VOL_MAX = 2 # Sets what interface reports as "100%"
+
+	def out_reader(out, stdout):
+		# This is a turd, please ignore it (it sniffs the output stream for "Volume: X %")
+		buf = ''
+		while 1:
+			c = out.read(1)
+			if not c: return
+			buf += c
+			if not 'Volume:'.startswith(buf):
+				stdout.write(buf)
+				buf = ''
+			elif buf == 'Volume:':
+				volbuf = ''
+				while 1:
+					c = out.read(1)
+					if not c: return # Volume report was interrupted, ignore it
+					buf += c
+					if c == '%':
+						setvol(float(volbuf) * VOL_MAX / 100.)
+						break
+					else:
+						volbuf += c
+				stdout.write(buf)
+				buf = ''
+
+	for filename, volume in playlist:
+		player_in = None
+		player_out = None
+		g_out_reader = None
+		try:
+			stdout.write(CLEAR + '\n' * 2)
+			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
+						'-volume', str(volume * 100. / VOL_MAX), filename],
+						 stdin=PIPE, stdout=PIPE)
+			player_in = FileObject(proc.stdin, bufsize=0, close=False)
+			player_out = FileObject(proc.stdout, bufsize=0, close=False)
+
+			g_out_reader = gevent.spawn(out_reader, player_out, stdout)
+
+			with RaiseOnExit(proc):
+				for c in readesc(stdin):
+					if c == 'q':
+						playlist.update(filename, weight=lambda x: x/2.)
+						player_in.write(" \n")
+					elif c == 'f':
+						playlist.update(filename, weight=lambda x: x*2.)
+					elif c == 'd':
+						playlist.update(filename, weight=lambda x: x/2.)
+					elif c == 'Q':
+						player_in.write("q")
+						return # TODO finally or with clause: do clean up
+					else:
+						player_in.write(c)
+
+		except OSError, e:
+			# There's a race that can occur here, causing a broken pipe error
+			if e.errno != errno.EPIPE: raise
+		except RaiseOnExit.ChildExited:
+			# This is the expected path out of the input loop
+			pass
+		finally:
+			try:
+				proc.terminate()
+			except OSError, e:
+				if e.errno != errno.ESRCH: raise
+			proc.wait()
+			if g_out_reader:
+				g_out_reader.join()
+				g_out_reader.kill()
+		if playlist.dirty: playlist.writefile()
+
+
+if __name__ == '__main__':
+	import debug
+	gevent.spawn(debug.starve_test)
+	gevent.sleep(0.2)
+	play(*sys.argv[1:])

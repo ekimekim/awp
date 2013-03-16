@@ -3,6 +3,24 @@ from collections import OrderedDict
 import os
 
 class Playlist(object):
+	"""Playlist files are newline-seperated records of one song per line.
+	Each line may have one of two formats:
+		WEIGHT \t PATH \n
+		WEIGHT \t VOLUME \t PATH \n
+
+	The first version is for compatibility and ease of playlist creation.
+	It is replaced by the second form by loading then saving a playlist.
+
+	WEIGHT is any float, and is a weighting used in the random selection of a song.
+
+	VOLUME is a float that should be between 0 and 2, default 0.5.
+	It indicates the volume level that the song should be played at.
+	Values > 1 use software amplification, which may result in clipping.
+	It is for this reason the default volume is half of normal.
+
+	PATH may be any string without newlines, but should be an absolute filepath to an audio file.
+	"""
+
 	filepath = None
 	dirty = False # flag indicating pending changes not copied to disk. False for new, empty playlist.
 
