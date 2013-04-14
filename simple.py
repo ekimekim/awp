@@ -29,7 +29,7 @@ from playlist import Playlist
 class RaiseOnExit(object):
 	"""Allows an exception to be raised upon a child exit.
 	Usage:
-		proc = Popen(...)
+		proc = gevent.subprocess.Popen(...)
 		try:
 			with RaiseOnExit(proc):
 				...
@@ -37,34 +37,28 @@ class RaiseOnExit(object):
 			# proc is dead
 		# exception will never occur here
 	"""
-	# Alot of this class isn't hugely nessecary now that proc.wait() is gevent-friendly,
-	# but I cbf refactoring for now.
 
 	class ChildExited(Exception): pass
 
-	def __init__(self, child, g_target=None, exception=ChildExited):
+	def __init__(self, proc, g_target=None, exception=ChildExited):
 		"""Pass in a greenlet g_target and a Popen object child.
 		When child exits, exception is raised in g_target.
 		exception defaults to RaiseOnExit.ChildExited.
 		g_target defaults to current greenlet at init time.
 		"""
 		self.g_target = g_target or gevent.getcurrent()
-		self.child = child
+		self.proc = proc
 		self.exception = exception
 
-	def child_handler(self, watcher):
-		# May run in hub
-		if self.child.poll() is not None:
-			gevent.spawn(lambda: self.g_target.throw(self.exception))
+	def throw_func(self):
+		self.g_target.throw(self.exception)
 
 	def __enter__(self):
-		# gevent.signal doesn't work for SIGCHLD...
-		self.watcher = gevent.hub.get_hub().loop.child(self.child.pid)
-		self.watcher.start(self.child_handler, self.watcher)
-		self.child_handler(None) # guard against race (child died before signal was setup)
+		self.waiter = gevent.spawn(lambda: self.proc.wait())
+		self.waiter.link(self.throw_func)
 
 	def __exit__(self, *exc_info):
-		self.watcher.stop()
+		self.waiter.unlink(self.throw_func)
 
 
 def play(playlist, stdin=None, stdout=None):
@@ -156,7 +150,6 @@ def play(playlist, stdin=None, stdout=None):
 			proc.wait()
 			if g_out_reader:
 				g_out_reader.join()
-				g_out_reader.kill()
 		if playlist.dirty: playlist.writefile()
 
 
