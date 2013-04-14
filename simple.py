@@ -24,6 +24,7 @@ import errno
 from readesc import readesc
 from escapes import CLEAR
 from playlist import Playlist
+from withtermios import TermAttrs
 
 
 class RaiseOnExit(object):
@@ -70,7 +71,6 @@ def play(playlist, stdin=None, stdout=None):
 		Q: Quit.
 	All promotions and demotions double/halve the weighting.
 	"""
-	# TODO sys.stdin raw mode
 
 	def convert_fobj(fobj):
 		make_nonblocking(fobj.fileno())
@@ -121,7 +121,7 @@ def play(playlist, stdin=None, stdout=None):
 
 			g_out_reader = gevent.spawn(out_reader, player_out, stdout)
 
-			with RaiseOnExit(proc):
+			with RaiseOnExit(proc), TermAttrs.raw():
 				for c in readesc(stdin):
 					if c == 'q':
 						playlist.update(filename, weight=lambda x: x/2.)
@@ -132,7 +132,7 @@ def play(playlist, stdin=None, stdout=None):
 						playlist.update(filename, weight=lambda x: x/2.)
 					elif c == 'Q':
 						player_in.write("q")
-						return # TODO finally or with clause: do clean up
+						return
 					else:
 						player_in.write(c)
 
