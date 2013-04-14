@@ -82,7 +82,7 @@ def play(playlist, stdin=None, stdout=None):
 
 	if isinstance(playlist, str): playlist = Playlist(playlist)
 
-	VOL_MAX = os.environ.get('VOL_MAX',2) # Sets what interface reports as "100%"
+	VOL_MAX = int(os.environ.get('VOL_MAX',2)) # Sets what interface reports as "100%"
 
 	def out_reader(out, stdout, filename):
 		# This is a turd, please ignore it (it sniffs the output stream for "Volume: X %")
@@ -112,6 +112,7 @@ def play(playlist, stdin=None, stdout=None):
 		player_in = None
 		player_out = None
 		g_out_reader = None
+		proc = None
 		try:
 			stdout.write(CLEAR + '\n' * 2)
 			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
@@ -146,11 +147,12 @@ def play(playlist, stdin=None, stdout=None):
 			# This is the expected path out of the input loop
 			pass
 		finally:
-			try:
-				proc.terminate()
-			except OSError, e:
-				if e.errno != errno.ESRCH: raise
-			proc.wait()
+			if proc:
+				try:
+					proc.terminate()
+				except OSError, e:
+					if e.errno != errno.ESRCH: raise
+				proc.wait()
 			if g_out_reader:
 				g_out_reader.join()
 		if playlist.dirty: playlist.writefile()
