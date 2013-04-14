@@ -116,7 +116,7 @@ def play(playlist, stdin=None, stdout=None):
 			stdout.write(CLEAR + '\n' * 2)
 			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
 						'-volume', str(volume * 100. / VOL_MAX), filename],
-						 stdin=PIPE, stdout=PIPE)
+						 stdin=PIPE, stdout=PIPE, stderr=open('/dev/null','w'))
 			player_in = convert_fobj(proc.stdin)
 			player_out = convert_fobj(proc.stdout)
 
