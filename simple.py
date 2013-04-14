@@ -13,9 +13,10 @@ due to creating a new process every time.
 In less concrete terms, this solution is "hacky" and possibly less reliable.
 """
 
-from subprocess import Popen, PIPE, STDOUT
+from gevent.subprocess import Popen, PIPE, STDOUT
 import gevent
 from gevent.fileobject import FileObject
+from gevent.os import make_nonblocking
 from signal import SIGCHLD
 import os, sys
 import errno
@@ -36,6 +37,8 @@ class RaiseOnExit(object):
 			# proc is dead
 		# exception will never occur here
 	"""
+	# Alot of this class isn't hugely nessecary now that proc.wait() is gevent-friendly,
+	# but I cbf refactoring for now.
 
 	class ChildExited(Exception): pass
 
@@ -51,28 +54,16 @@ class RaiseOnExit(object):
 
 	def child_handler(self, watcher):
 		# May run in hub
-		open('/tmp/log', 'a').write('watcher trigger: %d %s\n' % (self.child.pid, watcher))
 		if self.child.poll() is not None:
 			gevent.spawn(lambda: self.g_target.throw(self.exception))
-		else:
-			open('/tmp/log', 'a').write('false alarm?\n')
-			if watcher:
-				open('/tmp/log', 'a').write('poll(): {}\nPROC:\n{}\n'.format(
-					self.child.poll(),
-					open('/proc/%s/stat' % self.child.pid).read() if os.path.exists('/proc/%s/stat' % self.child.pid) else 'NO EXIST'
-				))
-				open('/tmp/log', 'a').write('and again: %s\n' % self.child.poll())
-				open('/tmp/log', 'a').write(os.waitpid(self.child.pid, os.WNOHANG))
 
 	def __enter__(self):
 		# gevent.signal doesn't work for SIGCHLD...
-		open('/tmp/log', 'a').write('watcher start for %d\n' % self.child.pid)
 		self.watcher = gevent.hub.get_hub().loop.child(self.child.pid)
 		self.watcher.start(self.child_handler, self.watcher)
 		self.child_handler(None) # guard against race (child died before signal was setup)
 
 	def __exit__(self, *exc_info):
-		open('/tmp/log', 'a').write('watcher stop\n')
 		self.watcher.stop()
 
 
@@ -87,8 +78,12 @@ def play(playlist, stdin=None, stdout=None):
 	"""
 	# TODO sys.stdin raw mode
 
-	if not stdin: stdin = FileObject(sys.stdin, bufsize=0, close=False)
-	if not stdout: stdout = FileObject(sys.stdout, bufsize=0, close=False)
+	def convert_fobj(fobj):
+		make_nonblocking(fobj.fileno())
+		return FileObject(fobj, bufsize=0, close=False)
+
+	if not stdin: stdin = convert_fobj(sys.stdin)
+	if not stdout: stdout = convert_fobj(sys.stdout)
 
 	if isinstance(playlist, str): playlist = Playlist(playlist)
 
@@ -127,8 +122,8 @@ def play(playlist, stdin=None, stdout=None):
 			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
 						'-volume', str(volume * 100. / VOL_MAX), filename],
 						 stdin=PIPE, stdout=PIPE)
-			player_in = FileObject(proc.stdin, bufsize=0, close=False)
-			player_out = FileObject(proc.stdout, bufsize=0, close=False)
+			player_in = convert_fobj(proc.stdin)
+			player_out = convert_fobj(proc.stdout)
 
 			g_out_reader = gevent.spawn(out_reader, player_out, stdout)
 

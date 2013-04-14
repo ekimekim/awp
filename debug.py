@@ -8,5 +8,5 @@ def starve_test():
 		raise Exception("Greenlets being starved")
 	signal.signal(signal.SIGALRM, boom)
 	while 1:
-		signal.alarm(1)
+		signal.alarm(2)
 		sleep(0.1)
