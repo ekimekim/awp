@@ -158,6 +158,6 @@ def play(playlist, stdin=None, stdout=None):
 
 if __name__ == '__main__':
 	import debug
-	gevent.spawn(debug.starve_test, open('/tmp/log', 'w'))
-	gevent.sleep(0.2)
+	#gevent.spawn(debug.starve_test, open('/tmp/log', 'w'))
+	#gevent.sleep(0.2)
 	play(*sys.argv[1:])
