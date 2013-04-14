@@ -82,7 +82,7 @@ def play(playlist, stdin=None, stdout=None):
 
 	if isinstance(playlist, str): playlist = Playlist(playlist)
 
-	VOL_MAX = 4 # Sets what interface reports as "100%"
+	VOL_MAX = os.environ.get('VOL_MAX',2) # Sets what interface reports as "100%"
 
 	def out_reader(out, stdout, filename):
 		# This is a turd, please ignore it (it sniffs the output stream for "Volume: X %")
