@@ -20,6 +20,7 @@ from gevent.os import make_nonblocking
 from signal import SIGCHLD
 import os, sys
 import errno
+from termios import ICANON, ECHO, ECHONL
 
 from readesc import readesc
 from escapes import CLEAR
@@ -51,7 +52,7 @@ class RaiseOnExit(object):
 		self.proc = proc
 		self.exception = exception
 
-	def throw_func(self):
+	def throw_func(self, waiter):
 		self.g_target.throw(self.exception)
 
 	def __enter__(self):
@@ -83,7 +84,7 @@ def play(playlist, stdin=None, stdout=None):
 
 	VOL_MAX = 2 # Sets what interface reports as "100%"
 
-	def out_reader(out, stdout):
+	def out_reader(out, stdout, filename):
 		# This is a turd, please ignore it (it sniffs the output stream for "Volume: X %")
 		buf = ''
 		while 1:
@@ -100,7 +101,7 @@ def play(playlist, stdin=None, stdout=None):
 					if not c: return # Volume report was interrupted, ignore it
 					buf += c
 					if c == '%':
-						setvol(float(volbuf) * VOL_MAX / 100.)
+						playlist.update(filename, volume = float(volbuf) * VOL_MAX / 100.)
 						break
 					else:
 						volbuf += c
@@ -119,10 +120,12 @@ def play(playlist, stdin=None, stdout=None):
 			player_in = convert_fobj(proc.stdin)
 			player_out = convert_fobj(proc.stdout)
 
-			g_out_reader = gevent.spawn(out_reader, player_out, stdout)
+			g_out_reader = gevent.spawn(out_reader, player_out, stdout, filename)
 
-			with RaiseOnExit(proc), TermAttrs.raw():
-				for c in readesc(stdin):
+			with RaiseOnExit(proc), \
+			     TermAttrs.modify(exclude=(0,0,0,ECHO|ECHONL|ICANON)):
+				while True:
+					c = stdin.read(1)
 					if c == 'q':
 						playlist.update(filename, weight=lambda x: x/2.)
 						player_in.write(" \n")
@@ -155,6 +158,6 @@ def play(playlist, stdin=None, stdout=None):
 
 if __name__ == '__main__':
 	import debug
-	gevent.spawn(debug.starve_test)
+	gevent.spawn(debug.starve_test, open('/tmp/log', 'w'))
 	gevent.sleep(0.2)
 	play(*sys.argv[1:])
