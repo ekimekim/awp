@@ -58,7 +58,8 @@ class Playlist(object):
 		if not filepath: raise ValueError("Cannot determine filepath")
 		if atomic:
 			true_path = filepath
-			filepath = ".{}~".format(filepath)
+			dirname, basename = os.path.split(filepath)
+			filepath = os.path.join(dirname, ".{}~".format(basename))
 		with open(filepath, 'w') as f:
 			for path, (weight, volume) in self.entries.items():
 				f.write('{}\t{}\t{}\n'.format(weight, volume, path))
