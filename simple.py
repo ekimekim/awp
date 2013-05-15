@@ -114,7 +114,7 @@ def play(playlist, stdin=None, stdout=None):
 		g_out_reader = None
 		proc = None
 		try:
-			stdout.write(CLEAR + '\n' * 2)
+			stdout.write(CLEAR + '\n{}\n\n'.format(playlist.format_entry(filename)))
 			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
 						'-volume', str(volume * 100. / VOL_MAX), filename],
 						 stdin=PIPE, stdout=PIPE, stderr=open('/dev/null','w'))
