@@ -103,4 +103,9 @@ class Playlist(object):
 
 	def __str__(self):
 		return "<Playlist{} ({} entries)>".format(" {!r}".format(self.filepath) if self.filepath else '', len(self.entries))
+
+	def verify(self):
+		"""Return a list of all entries whose files cannot be accessed."""
+		return [path for path in self.entries if not os.access(path, os.R_OK)]
+
 	__repr__ = __str__
