@@ -27,6 +27,7 @@ from escapes import CLEAR
 from playlist import Playlist
 from withtermios import TermAttrs
 
+VOL_FUDGE = float(os.environ.get('VOL_FUDGE', 0))
 
 class RaiseOnExit(object):
 	"""Allows an exception to be raised upon a child exit.
@@ -101,7 +102,7 @@ def play(playlist, stdin=None, stdout=None):
 					if not c: return # Volume report was interrupted, ignore it
 					buf += c
 					if c == '%':
-						playlist.update(filename, volume = float(volbuf) * VOL_MAX / 100.)
+						playlist.update(filename, volume = float(volbuf) * VOL_MAX / 100. - VOL_FUDGE)
 						break
 					else:
 						volbuf += c
@@ -116,7 +117,7 @@ def play(playlist, stdin=None, stdout=None):
 		try:
 			stdout.write(CLEAR + '\n{}\n\n'.format(playlist.format_entry(filename)))
 			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
-						'-volume', str(volume * 100. / VOL_MAX), filename],
+						'-volume', str((volume + VOL_FUDGE) * 100. / VOL_MAX), filename],
 						 stdin=PIPE, stdout=PIPE, stderr=open('/dev/null','w'))
 			player_in = convert_fobj(proc.stdin)
 			player_out = convert_fobj(proc.stdout)
