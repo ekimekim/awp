@@ -10,9 +10,10 @@ def spawn_rainymood():
 		proc = None
 		with open(os.devnull, 'r+') as null:
 			try:
-				proc = Popen(['rainymood'], stdin=PIPE, stdout=null)
+				proc = Popen(['rainymood'], stdin=PIPE, stdout=null, stderr=null)
 				proc.wait() # intentional deadlock (proc won't terminate unless it errors)
 				            # we wait for outside code to kill the greenlet
 			except BaseException:
 				if proc: proc.terminate()
+				raise
 	return rainymood
