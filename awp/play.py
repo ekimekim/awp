@@ -28,6 +28,7 @@ from termhelpers import TermAttrs
 
 from playlist import Playlist
 from lastfm import LastFM, getmetadata
+from rainymood import spawn_rainymood
 
 class RaiseOnExit(object):
 	"""Allows an exception to be raised upon a child exit.
@@ -86,6 +87,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 		f: Promote.
 		d: Demote without skipping
 		Q: Quit.
+		r: Toggle rainymood
 	All promotions and demotions double/halve the weighting.
 	ptype is the Playlist subtype to use if paylist is string.
 	ptype may be string, in which case it should be "module:name" to import
@@ -114,6 +116,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 	                                               # DISABLES PERSISTENT VOLUME CHANGES WHEN NOT DEFAULT
 
 	new_volume = [None] # one-element list to force non-local variable
+	rainymood = None
 
 	while True:
 
@@ -156,6 +159,12 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 						# note player can exceed 1 volume but we do not.
 						proc.stdin.write(c)
 						proc.stdin.flush()
+					elif c == 'r':
+						if rainymood:
+							rainymood.kill(block=False)
+							rainymood = None
+						else:
+							rainymood = spawn_rainymood()
 					else:
 						# we need to deliver entire escapes at once, or else
 						# mplayer does unexpected things (like quitting)
