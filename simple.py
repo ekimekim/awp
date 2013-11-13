@@ -159,7 +159,9 @@ def play(playlist, stdin=None, stdout=None):
 
 
 if __name__ == '__main__':
-	import debug
-	#gevent.spawn(debug.starve_test, open('/tmp/log', 'w'))
-	#gevent.sleep(0.2)
+#	import debug
+#	import gevent.backdoor
+#	gevent.backdoor.BackdoorServer(('localhost', 1666)).start()
+#	gevent.spawn(debug.starve_test, open('/tmp/log', 'w'))
+#	gevent.sleep(0.2)
 	play(*sys.argv[1:])
