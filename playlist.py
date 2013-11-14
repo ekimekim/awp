@@ -108,4 +108,95 @@ class Playlist(object):
 		"""Return a list of all entries whose files cannot be accessed."""
 		return [path for path in self.entries if not os.access(path, os.R_OK)]
 
+	def merge(self, other, strategy=None):
+		"""Update this playlist by merging in another playlist as according to
+		the given strategy.
+
+		other may be a filename or a Playlist.
+
+		strategy may be any of the strategies defined in MergeStrategies, or
+		a function that takes (path, this_value, other_value) as args, and should
+		return the new value to take.
+		Either value may be None if the other playlist doesn't have that entry.
+		The function may return None to omit the entry.
+
+		Alternately, strategy may be a 2-tuple of such strategies/functions, where
+		the first element applies to merging weights and the second to volumes.
+		The default value is to use MergeStrategies.average for weight and
+		MergeStrategies.extreme(average of current volumes) for volume.
+
+		Note this operation doesn't write immediately, but will set the dirty flag
+		if any changes occur.
+		"""
+
+		if strategy is None:
+			vol_average = sum(vol for weight, vol in self.entries) / len(self.entries)
+			strategy = MergeStrategies.average, MergeStrategies.extreme(vol_average)
+		if callable(strategy):
+			# use the same for both
+			strategy = strategy, strategy
+		weight_strategy, vol_strategy = strategy
+
+		if not isinstance(other, Playlist):
+			other = Playlist(other)
+
+		# get list of paths without uniques but with correct order (new at end)
+		d = self.entries.copy()
+		d.update(other.entries)
+		paths = d.keys()
+
+		for path in path:
+			this_weight, this_vol = self.entries.get(path, (None, None))
+			other_weight, other_vol = other.entries.get(path, (None, None))
+			weight = weight_strategy(path, this_weight, other_weight)
+			vol = vol_strategy(path, this_vol, other_vol)
+			if weight is not None and vol is not None:
+				self.add_item(path, weight, vol, warn=False)
+			else:
+				self.entries.pop(path, None) # remove if present
+
 	__repr__ = __str__
+
+
+
+class MergeStrategies(object):
+	def __new__(*args): raise NotImplementedError("This class should not be instantiated")
+
+	@staticmethod
+	def average(path, *values):
+		"""Takes the average of the two numbers. If one is not present, just uses the other."""
+		values = [x for x in values if x is not None]
+		return sum(values) / len(values)
+
+	@staticmethod
+	def extreme(midpoint):
+		"""This is a factory that returns a usable strategy function.
+		It takes the 'more extreme' of the two numbers, defined as whichever
+		is further from the given midpoint (ties favour the greater value).
+		If either value is None, the other is returned.
+		A good midpoint to use might be the average of the current value, or the median.
+		"""
+		def _extreme(path, *values):
+			values = [x for x in values if x is not None]
+			return sorted(values, key=lambda value: (abs(value-midpoint), value), reverse=True)[0]
+		return _extreme
+
+	@staticmethod
+	def update(path, old, new):
+		"""Always use the new value, unless it doesn't exist (in which case use the old value)"""
+		if new is None: return old
+		return new
+
+	@staticmethod
+	def existsonly(strategy):
+		"""Factory functino. Wraps another strategy, making it return None unless the path is already present
+		in the current playlist. If given a tuple, will wrap both strategies."""
+		def _existsonly_factory(single_strat):
+			def _existsonly(path, old, new):
+				if old is None: return None
+				return strategy(path, old, new)
+			return _existsonly
+		if callable(strategy):
+			return _existsonly_factory(strategy)
+		else:
+			return [_existsonly_factory(strat_func) for strat_func in strategy]
