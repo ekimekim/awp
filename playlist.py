@@ -145,7 +145,7 @@ class Playlist(object):
 		d.update(other.entries)
 		paths = d.keys()
 
-		for path in path:
+		for path in paths:
 			this_weight, this_vol = self.entries.get(path, (None, None))
 			other_weight, other_vol = other.entries.get(path, (None, None))
 			weight = weight_strategy(path, this_weight, other_weight)
