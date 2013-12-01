@@ -148,26 +148,26 @@ class Playlist(object):
 		"""
 
 		if strategy is None:
-			vol_average = sum(vol for weight, vol in self.entries) / len(self.entries)
+			vol_average = sum(vol for weight, vol in self.entries.values()) / len(self.entries)
 			strategy = MergeStrategies.average, MergeStrategies.extreme(vol_average)
+
 		if callable(strategy):
 			# use the same for both
-			strategy = strategy, strategy
-		weight_strategy, vol_strategy = strategy
+			strategies = strategy, strategy
+		else:
+			strategies = strategy
 
 		if not isinstance(other, Playlist):
 			other = Playlist(other)
 
 		for path, (ours, theirs) in self.diff(other).items():
-			this_weight = this_vol = other_weight = other_vol = None
-			if ours: this_weight, this_vol = ours
-			if theirs: other_weight, other_vol = theirs
-			weight = weight_strategy(path, this_weight, other_weight)
-			vol = vol_strategy(path, this_vol, other_vol)
-			if weight is not None and vol is not None:
-				self.add_item(path, weight, vol, warn=False)
-			else:
+			ours, theirs = (x or (None, None) for x in (ours, theirs))
+			merged = tuple(strategy(path, wgt, vol) for strategy, wgt, vol in zip(strategies, ours, theirs))
+			assert len(merged) == 2, "Something went wrong with the zip"
+			if None in merged:
 				self.entries.pop(path, None) # remove if present
+			else:
+				self.add_item(path, *merged, warn=False)
 
 	__repr__ = __str__
 
