@@ -158,14 +158,10 @@ class Playlist(object):
 		if not isinstance(other, Playlist):
 			other = Playlist(other)
 
-		# get list of paths without uniques but with correct order (new at end)
-		d = self.entries.copy()
-		d.update(other.entries)
-		paths = d.keys()
-
-		for path in paths:
-			this_weight, this_vol = self.entries.get(path, (None, None))
-			other_weight, other_vol = other.entries.get(path, (None, None))
+		for path, (ours, theirs) in self.diff(other).items():
+			this_weight = this_vol = other_weight = other_vol = None
+			if ours: this_weight, this_vol = ours
+			if theirs: other_weight, other_vol = theirs
 			weight = weight_strategy(path, this_weight, other_weight)
 			vol = vol_strategy(path, this_vol, other_vol)
 			if weight is not None and vol is not None:
