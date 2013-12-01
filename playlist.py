@@ -108,6 +108,24 @@ class Playlist(object):
 		"""Return a list of all entries whose files cannot be accessed."""
 		return [path for path in self.entries if not os.access(path, os.R_OK)]
 
+	def diff(self, other):
+		"""Compares this playlist with another and returns a structure describing the differences.
+		Return value is an ordered dict mapping paths to tuples of
+			((this_weight, this_volume), (other_weight, other_volume))
+		with either of the inner tuples being None if the path is not present in that playlist.
+		Order is as per this playlist, with paths not in this playlist inserted in order
+		at the end.
+		"""
+		paths = self.entries.copy()
+		paths.update(other.entries)
+		paths = paths.keys()
+		ret = OrderedDict()
+		for path in paths:
+			ours, theirs = (playlist.entries.get(path, None) for playlist in (self, other))
+			if ours != theirs:
+				ret[path] = ours, theirs
+		return ret
+
 	def merge(self, other, strategy=None):
 		"""Update this playlist by merging in another playlist as according to
 		the given strategy.
