@@ -214,3 +214,69 @@ class MergeStrategies(object):
 			return _existsonly_factory(strategy)
 		else:
 			return [_existsonly_factory(strat_func) for strat_func in strategy]
+
+
+AUDIO_EXTENSIONS = ['flac', 'aac', 'm4a', 'wav', 'ogg', 'mp3', 'wma']
+def from_directory(root, weight=16, volume=0.5, extensions=AUDIO_EXTENSIONS, use_magic=True,
+                   recurse=True, relative=False, detect_duplicates=True, followlinks=False,
+                   onerror=None):
+	"""Constructs a playlist by scanning a directory and all sub-directories.
+	All found files will be added to the playlist with the given weight and volume.
+	Other options:
+		extensions: If not None, assume any files with an extension in the given iterable is
+		            an audio file.
+		use_magic: If available, try to use the python-magic library to detect audio files
+		recurse: Set False to not scan sub-directories.
+		relative: If True and path is relative, create a playlist of relative paths.
+		          Otherwise, absolute paths are used.
+		detect_duplicates: Consider files of the form 'x', 'x.ext1' and 'x.ext2' to be the same item.
+		                   The extension given earliest in extensions (if any) takes precedence.
+		                   Otherwise the first one found is used.
+		followlinks: As per os.walk
+		onerror: As per os.walk
+	"""
+
+	magic = None
+	if use_magic:
+		try:
+			import magic
+			magic = magic.Magic(mime=True)
+		except ImportError:
+			pass
+
+	if not relative:
+		root = os.path.abspath(root)
+
+	playlist = Playlist()
+	duplicate_check = {}
+
+	for path, subdirs, files in os.walk(root, followlinks=followlinks, onerror=onerror):
+		if not recurse:
+			# empty list in-place
+			while subdirs: subdirs.pop()
+
+		for file in files:
+			filepath = os.path.join(path, file)
+			name, ext = os.path.splitext(filepath)
+			ext = ext.lower().lstrip('.')
+
+			if not extensions or ext not in extensions:
+				mime = magic.from_file(filepath)
+				if not mime or not mime.startswith('audio/'):
+					continue
+
+			if detect_duplicates:
+				if name in duplicate_check:
+					other = duplicate_check[name]
+					if extensions and ext in extensions:
+						junk, other_ext = os.path.splitext(other)
+						if other_ext in extensions and extensions.index(other_ext) <= extensions.index(ext):
+							continue
+					else:
+						continue
+
+				duplicate_check[name] = filepath
+
+			playlist.add_item(filepath, weight=weight, volume=volume)
+
+	return playlist
