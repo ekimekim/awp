@@ -260,11 +260,14 @@ def from_directory(root, weight=16, volume=0.5, extensions=AUDIO_EXTENSIONS, use
 			name, ext = os.path.splitext(filepath)
 			ext = ext.lower().lstrip('.')
 
+			print 'considering', file
 			if not extensions or ext not in extensions:
+				print ext, 'not in extensions'
 				mime = magic.from_file(filepath)
 				if not mime or not mime.startswith('audio/'):
 					continue
 
+			print 'checking', file, 'for duplicates'
 			if detect_duplicates:
 				if name in duplicate_check:
 					other = duplicate_check[name]
@@ -277,6 +280,7 @@ def from_directory(root, weight=16, volume=0.5, extensions=AUDIO_EXTENSIONS, use
 
 				duplicate_check[name] = filepath
 
+			print 'adding', file
 			playlist.add_item(filepath, weight=weight, volume=volume)
 
 	return playlist
