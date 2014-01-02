@@ -83,6 +83,8 @@ def play(playlist, stdin=None, stdout=None):
 	if isinstance(playlist, str): playlist = Playlist(playlist)
 
 	VOL_MAX = int(os.environ.get('VOL_MAX',2)) # Sets what interface reports as "100%"
+	VOL_FUDGE = float(os.environ.get('VOL_FUDGE',1)) # Volume fudge factor to modify volume globally.
+	                                               # DISABLES PERSISTENT VOLUME CHANGES WHEN NOT DEFAULT
 
 	def out_reader(out, stdout, filename):
 		# This is a turd, please ignore it (it sniffs the output stream for "Volume: X %")
@@ -101,7 +103,8 @@ def play(playlist, stdin=None, stdout=None):
 					if not c: return # Volume report was interrupted, ignore it
 					buf += c
 					if c == '%':
-						playlist.update(filename, volume = float(volbuf) * VOL_MAX / 100.)
+						if VOL_FUDGE == 1:
+							playlist.update(filename, volume = float(volbuf) * VOL_MAX / 100.)
 						break
 					else:
 						volbuf += c
@@ -116,7 +119,7 @@ def play(playlist, stdin=None, stdout=None):
 		try:
 			stdout.write(CLEAR + '\n{}\n\n'.format(playlist.format_entry(filename)))
 			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
-						'-volume', str(volume * 100. / VOL_MAX), filename],
+						'-volume', str(VOL_FUDGE * volume * 100. / VOL_MAX), filename],
 						 stdin=PIPE, stdout=PIPE, stderr=open('/dev/null','w'))
 			player_in = convert_fobj(proc.stdin)
 			player_out = convert_fobj(proc.stdout)
