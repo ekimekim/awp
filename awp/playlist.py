@@ -61,11 +61,14 @@ class Playlist(object):
 			dirname, basename = os.path.split(filepath)
 			filepath = os.path.join(dirname, ".{}~".format(basename))
 		with open(filepath, 'w') as f:
-			for path, (weight, volume) in self.entries.items():
-				f.write('{}\t{}\t{}\n'.format(weight, volume, path))
+			self.write(f)
 		if atomic:
 			os.rename(filepath, true_path)
 		self.dirty = False
+
+	def write(self, f):
+		for path, (weight, volume) in self.entries.items():
+			f.write('{}\t{}\t{}\n'.format(weight, volume, path))
 
 	def add_item(self, path, weight, volume, warn=True):
 		"""If warn=True, prints a warning to stdout on duplicate entry."""
@@ -93,6 +96,11 @@ class Playlist(object):
 		"""Get next thing to play. Returns (path, volume)"""
 		weights = { (path, volume) : weight for path, (weight, volume) in self.entries.items() }
 		return weighted_choice(weights)
+
+	def copy(self):
+		result = Playlist()
+		result.entries = self.entries.copy()
+		return result
 
 	def format_entry(self, path, weight=None, volume=None):
 		"""Return the canonical string form of an entry."""
