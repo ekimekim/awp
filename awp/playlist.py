@@ -250,7 +250,7 @@ def from_directory(root, weight=16, volume=0.5, extensions=AUDIO_EXTENSIONS, use
 			import magic
 			magic = magic.Magic(mime=True)
 		except ImportError:
-			pass
+			use_magic = False
 
 	if not relative:
 		root = os.path.abspath(root)
@@ -268,7 +268,9 @@ def from_directory(root, weight=16, volume=0.5, extensions=AUDIO_EXTENSIONS, use
 			name, ext = os.path.splitext(filepath)
 			ext = ext.lower().lstrip('.')
 
-			if not extensions or ext not in extensions:
+			if (not extensions or ext not in extensions):
+				if not use_magic:
+					continue
 				mime = magic.from_file(filepath)
 				if not mime or not mime.startswith('audio/'):
 					continue
