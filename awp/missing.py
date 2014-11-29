@@ -16,7 +16,8 @@ import awp.playlist
 def main(filename, searchpath, nomagic=False, extensions=None, norecurse=False, verbose=False):
 	if extensions: extensions = extensions.split()
 	playlist = awp.playlist.Playlist(filename)
-	found_list = awp.playlist.from_directory(searchpath, extensions=extensions, use_magic=(not nomagic), recurse=(not norecurse))
+	kwargs = {'extensions': extensions} if extensions is not None else {}
+	found_list = awp.playlist.from_directory(searchpath, use_magic=(not nomagic), recurse=(not norecurse), **kwargs)
 	diff = playlist.diff(found_list)
 	if verbose:
 		print "{} contains {} entries".format(filename, len(playlist.entries))
