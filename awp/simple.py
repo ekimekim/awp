@@ -20,6 +20,7 @@ from gevent.os import make_nonblocking
 from signal import SIGCHLD
 import os, sys
 import errno
+from importlib import import_module
 from termios import ICANON, ECHO, ECHONL
 
 from readesc import readesc
@@ -63,7 +64,7 @@ class RaiseOnExit(object):
 		self.waiter.unlink(self.throw_func)
 
 
-def play(playlist, stdin=None, stdout=None):
+def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 	"""Takes a Playlist and plays forever.
 	Controls (in addition to mplayer standard controls):
 		q: Skip and demote.
@@ -71,6 +72,8 @@ def play(playlist, stdin=None, stdout=None):
 		d: Demote without skipping
 		Q: Quit.
 	All promotions and demotions double/halve the weighting.
+	ptype is the Playlist subtype to use if paylist is string.
+	ptype may be string, in which case it should be "module:name" to import
 	"""
 
 	def convert_fobj(fobj):
@@ -80,7 +83,12 @@ def play(playlist, stdin=None, stdout=None):
 	if not stdin: stdin = convert_fobj(sys.stdin)
 	if not stdout: stdout = convert_fobj(sys.stdout)
 
-	if isinstance(playlist, str): playlist = Playlist(playlist)
+	if isinstance(playlist, str):
+		if isinstance(ptype, str):
+			module, name = ptype.split(':')
+			module = import_module(module)
+			ptype = getattr(module, name)
+		playlist = ptype(playlist)
 
 	VOL_MAX = int(os.environ.get('VOL_MAX',2)) # Sets what interface reports as "100%"
 	VOL_FUDGE = float(os.environ.get('VOL_FUDGE',1)) # Volume fudge factor to modify volume globally.
