@@ -25,9 +25,9 @@ from termios import ICANON, ECHO, ECHONL
 
 from readesc import readesc
 from escapes import CLEAR
-from playlist import Playlist
-from withtermios import TermAttrs
+from termhelpers import TermAttrs
 
+from playlist import Playlist
 
 class RaiseOnExit(object):
 	"""Allows an exception to be raised upon a child exit.
