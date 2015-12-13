@@ -211,7 +211,7 @@ class MergeStrategies(object):
 
 	@staticmethod
 	def existsonly(strategy):
-		"""Factory functino. Wraps another strategy, making it return None unless the path is already present
+		"""Factory function. Wraps another strategy, making it return None unless the path is already present
 		in the current playlist. If given a tuple, will wrap both strategies."""
 		def _existsonly_factory(single_strat):
 			def _existsonly(path, old, new):
