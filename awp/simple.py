@@ -76,12 +76,12 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 	ptype may be string, in which case it should be "module:name" to import
 	"""
 
-	def convert_fobj(fobj):
+	def convert_fobj(fobj, mode):
 		make_nonblocking(fobj.fileno())
-		return FileObject(fobj, bufsize=0, close=False)
+		return FileObject(fobj, mode=mode, bufsize=0, close=False)
 
-	if not stdin: stdin = convert_fobj(sys.stdin)
-	if not stdout: stdout = convert_fobj(sys.stdout)
+	if not stdin: stdin = convert_fobj(sys.stdin, 'r')
+	if not stdout: stdout = convert_fobj(sys.stdout, 'w')
 
 	if isinstance(playlist, str):
 		if isinstance(ptype, str):
@@ -129,8 +129,8 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
 						'-volume', str(VOL_FUDGE * volume * 100. / VOL_MAX), filename],
 						 stdin=PIPE, stdout=PIPE, stderr=open('/dev/null','w'))
-			player_in = convert_fobj(proc.stdin)
-			player_out = convert_fobj(proc.stdout)
+			player_in = convert_fobj(proc.stdin, 'w')
+			player_out = convert_fobj(proc.stdout, 'r')
 
 			g_out_reader = gevent.spawn(out_reader, player_out, stdout, filename)
 
