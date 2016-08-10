@@ -17,6 +17,7 @@ from gevent.subprocess import Popen, PIPE, STDOUT
 import gevent
 from gevent.fileobject import FileObject
 from gevent.os import make_nonblocking
+from gevent.select import select
 from signal import SIGCHLD
 import os, sys
 import errno
@@ -77,7 +78,6 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 	"""
 
 	def convert_fobj(fobj, mode):
-		make_nonblocking(fobj.fileno())
 		return FileObject(fobj, mode=mode, bufsize=0, close=False)
 
 	if not stdin: stdin = convert_fobj(sys.stdin, 'r')
@@ -149,7 +149,18 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 						player_in.write("q")
 						return
 					else:
+						# we need to deliver entire escapes at once, or else
+						# mplayer does unexpected things (like quitting)
+						# so we read the entire available input before acting
+						while True:
+							r, w, x = select([stdin], [], [], 0)
+							if not r:
+								break
+							c += stdin.read(1)
 						player_in.write(c)
+					# a bug in gevent means that even with bufsize=0, bufsize=1.
+					# so we have to flush to actually have it write
+					player_in.flush()
 
 		except OSError, e:
 			# There's a race that can occur here, causing a broken pipe error
