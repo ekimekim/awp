@@ -177,6 +177,55 @@ class Playlist(object):
 			else:
 				self.add_item(path, *merged, warn=False)
 
+	def _common_divisor_weight(self):
+		"""Attempt to guess the greatest common divisor of our weights.
+		Will give up and ValueError in some cases. May not give the greatest common divisor,
+		but will always give *some* common divisor.
+		Note: Ignores entries with 0 weight"""
+		BRUTE_LIMIT = 1000
+
+		weights = set(weight for weight, vol in self.entries.values()) - {0}
+		def is_divisor(n):
+			return all(x % n == 0 for x in weights)
+		# we take a VERY naive and VERY inefficient route to guessing a GCD of the set of weights:
+		# if the min weight works, use it
+		min_weight = min(weights)
+		if is_divisor(min_weight):
+			return min_weight
+		# if all weights are integers and min_weight is reasonably small, just brute force it
+		if all(int(x) == x for x in weights) and min_weight < BRUTE_LIMIT:
+			for n in xrange(min_weight - 1, 0, -1):
+				if is_divisor(n):
+					return n
+				assert False, "1 was not divisor of all-integer weights"
+		# eh, that'll do.
+		raise ValueError("Could not determine a common divisor of {} unique weights".format(len(weights)))
+
+	def to_repeated_list(self, scale=None):
+		"""Return the playlist in a "repeated list" form - a list of filepaths, using repetition to
+		represent the weights, such that random.choice(self.to_repeated_list()) should give correctly
+		weighted results. Discards volume info.
+		For example, a list like:
+			1 foo
+			2 bar
+			5 baz
+		will return ["foo", "bar", "bar", "baz", "baz", "baz", "baz", "baz"].
+		By default, will attempt to scale the weights to make the result list as small as possible.
+		For example, if the weights were foo=2, bar=4, then the result should be ["foo", "bar", "bar"],
+		not ["foo", "foo", "bar", "bar", "bar", "bar"].
+		This may not always be successful if weights < 1 are present, and will result in ValueError.
+		If scale is given, it explicitly chooses a value to divide by when translating from weights
+		to number of instances in the result list. eg. In the above example, you could get the same result
+		by passing scale=2. If explicitly given, scale will truncate weights. eg. if you gave scale=2 to the
+		first example with foo, bar and baz, the result would be ["bar", "baz", "baz"] (foo was rounded to 0)
+		"""
+		if not scale:
+			scale = self._common_divisor_weight()
+		result = []
+		for path, (weight, vol) in self.entries.items():
+			result += [path] * int(weight / scale)
+		return result
+
 	__repr__ = __str__
 
 
