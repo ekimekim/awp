@@ -15,7 +15,6 @@ In less concrete terms, this solution is "hacky" and possibly less reliable.
 
 from gevent.subprocess import Popen, PIPE
 import gevent
-from gevent.fileobject import FileObject
 from gevent.select import select
 import os, sys
 import errno
@@ -74,11 +73,18 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 	ptype may be string, in which case it should be "module:name" to import
 	"""
 
-	def convert_fobj(fobj, mode):
-		return FileObject(fobj, mode=mode, bufsize=0, close=False)
+	if not stdin:
+		stdin = sys.stdin
+	if not stdout:
+		stdout = sys.stdout
 
-	if not stdin: stdin = convert_fobj(sys.stdin, 'r')
-	if not stdout: stdout = convert_fobj(sys.stdout, 'w')
+	# We can't guarentee stdin is gevent-safe, and using a FileObject
+	# wrapper leaves it in non-blocking mode after exit.
+	def read_stdin():
+		while True:
+			r, w, x = select([stdin], [], [])
+			if stdin in r:
+				return stdin.read(1)
 
 	if isinstance(playlist, str):
 		if isinstance(ptype, str):
@@ -104,6 +110,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 				buf += read()
 				if not 'Volume:'.startswith(buf):
 					stdout.write(buf)
+					stdout.flush()
 					buf = ''
 				elif buf == 'Volume:':
 					volbuf = ''
@@ -117,6 +124,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 						else:
 							volbuf += c
 					stdout.write(buf)
+					stdout.flush()
 					buf = ''
 		except EOFError:
 			pass
@@ -135,7 +143,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 			with RaiseOnExit(proc), \
 			     TermAttrs.modify(exclude=(0,0,0,ECHO|ECHONL|ICANON)):
 				while True:
-					c = stdin.read(1)
+					c = read_stdin()
 					if c == 'q':
 						playlist.update(filename, weight=lambda x: x/2.)
 						proc.stdin.write("q")
@@ -155,7 +163,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 							r, w, x = select([stdin], [], [], 0)
 							if not r:
 								break
-							c += stdin.read(1)
+							c += read_stdin()
 						proc.stdin.write(c)
 					proc.stdin.flush()
 
@@ -178,9 +186,4 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 
 
 if __name__ == '__main__':
-#	import debug
-#	import gevent.backdoor
-#	gevent.backdoor.BackdoorServer(('localhost', 1666)).start()
-#	gevent.spawn(debug.starve_test, open('/tmp/log', 'w'))
-#	gevent.sleep(0.2)
 	play(*sys.argv[1:])
