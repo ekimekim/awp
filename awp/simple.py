@@ -120,7 +120,6 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 				buf = ''
 
 	for filename, volume in playlist:
-		player_in = None
 		player_out = None
 		g_out_reader = None
 		proc = None
@@ -129,7 +128,6 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
 						'-volume', str(VOL_FUDGE * volume * 100. / VOL_MAX), filename],
 						 stdin=PIPE, stdout=PIPE, stderr=open('/dev/null','w'))
-			player_in = convert_fobj(proc.stdin, 'w')
 			player_out = convert_fobj(proc.stdout, 'r')
 
 			g_out_reader = gevent.spawn(out_reader, player_out, stdout, filename)
@@ -140,13 +138,14 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 					c = stdin.read(1)
 					if c == 'q':
 						playlist.update(filename, weight=lambda x: x/2.)
-						player_in.write(" \n")
+						proc.stdin.write("q")
 					elif c == 'f':
 						playlist.update(filename, weight=lambda x: x*2.)
 					elif c == 'd':
 						playlist.update(filename, weight=lambda x: x/2.)
 					elif c == 'Q':
-						player_in.write("q")
+						proc.stdin.write("q")
+						proc.stdin.flush()
 						return
 					else:
 						# we need to deliver entire escapes at once, or else
@@ -157,10 +156,8 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 							if not r:
 								break
 							c += stdin.read(1)
-						player_in.write(c)
-					# a bug in gevent means that even with bufsize=0, bufsize=1.
-					# so we have to flush to actually have it write
-					player_in.flush()
+						proc.stdin.write(c)
+					proc.stdin.flush()
 
 		except OSError, e:
 			# There's a race that can occur here, causing a broken pipe error
