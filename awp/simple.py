@@ -13,18 +13,15 @@ due to creating a new process every time.
 In less concrete terms, this solution is "hacky" and possibly less reliable.
 """
 
-from gevent.subprocess import Popen, PIPE, STDOUT
+from gevent.subprocess import Popen, PIPE
 import gevent
 from gevent.fileobject import FileObject
-from gevent.os import make_nonblocking
 from gevent.select import select
-from signal import SIGCHLD
 import os, sys
 import errno
 from importlib import import_module
 from termios import ICANON, ECHO, ECHONL
 
-from readesc import readesc
 from escapes import CLEAR
 from termhelpers import TermAttrs
 
