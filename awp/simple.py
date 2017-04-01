@@ -87,10 +87,6 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 				return stdin.read(1)
 
 	if isinstance(playlist, str):
-		if isinstance(ptype, str):
-			module, name = ptype.split(':')
-			module = import_module(module)
-			ptype = getattr(module, name)
 		playlist = ptype(playlist)
 
 	VOL_MAX = int(os.environ.get('VOL_MAX',2)) # Sets what interface reports as "100%"
@@ -185,5 +181,15 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 		if playlist.dirty: playlist.writefile()
 
 
+def main(playlist, ptype=''):
+	kwargs = {}
+	if ptype:
+		module, name = ptype.split(':')
+		module = import_module(module)
+		kwargs['ptype'] = getattr(module, name)
+	play(playlist, **kwargs)
+
+
 if __name__ == '__main__':
-	play(*sys.argv[1:])
+	import argh
+	argh.dispatch_command(main)
