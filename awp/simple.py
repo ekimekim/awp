@@ -93,31 +93,35 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 
 	def out_reader(out, stdout, filename):
 		# This is a turd, please ignore it (it sniffs the output stream for "Volume: X %")
-		buf = ''
-		while 1:
+		def read():
 			c = out.read(1)
-			if not c: return
-			buf += c
-			if not 'Volume:'.startswith(buf):
-				stdout.write(buf)
-				buf = ''
-			elif buf == 'Volume:':
-				volbuf = ''
-				while 1:
-					c = out.read(1)
-					if not c: return # Volume report was interrupted, ignore it
-					buf += c
-					if c == '%':
-						if VOL_FUDGE == 1:
-							playlist.update(filename, volume = float(volbuf) * VOL_MAX / 100.)
-						break
-					else:
-						volbuf += c
-				stdout.write(buf)
-				buf = ''
+			if not c: raise EOFError
+			return c
+
+		buf = ''
+		try:
+			while True:
+				buf += read()
+				if not 'Volume:'.startswith(buf):
+					stdout.write(buf)
+					buf = ''
+				elif buf == 'Volume:':
+					volbuf = ''
+					while True:
+						c = read()
+						buf += c
+						if c == '%':
+							if VOL_FUDGE == 1:
+								playlist.update(filename, volume = float(volbuf) * VOL_MAX / 100.)
+							break
+						else:
+							volbuf += c
+					stdout.write(buf)
+					buf = ''
+		except EOFError:
+			pass
 
 	for filename, volume in playlist:
-		player_out = None
 		g_out_reader = None
 		proc = None
 		try:
@@ -125,9 +129,8 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
 						'-volume', str(VOL_FUDGE * volume * 100. / VOL_MAX), filename],
 						 stdin=PIPE, stdout=PIPE, stderr=open('/dev/null','w'))
-			player_out = convert_fobj(proc.stdout, 'r')
 
-			g_out_reader = gevent.spawn(out_reader, player_out, stdout, filename)
+			g_out_reader = gevent.spawn(out_reader, proc.stdout, stdout, filename)
 
 			with RaiseOnExit(proc), \
 			     TermAttrs.modify(exclude=(0,0,0,ECHO|ECHONL|ICANON)):
