@@ -88,10 +88,14 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 
 	if isinstance(playlist, str):
 		playlist = ptype(playlist)
+	else:
+		ptype = type(playlist)
 
 	VOL_MAX = int(os.environ.get('VOL_MAX',2)) # Sets what interface reports as "100%"
 	VOL_FUDGE = float(os.environ.get('VOL_FUDGE',1)) # Volume fudge factor to modify volume globally.
 	                                               # DISABLES PERSISTENT VOLUME CHANGES WHEN NOT DEFAULT
+
+	new_volume = [None] # one-element list to force non-local variable
 
 	def out_reader(out, stdout, filename):
 		# This is a turd, please ignore it (it sniffs the output stream for "Volume: X %")
@@ -115,7 +119,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 						buf += c
 						if c == '%':
 							if VOL_FUDGE == 1:
-								playlist.update(filename, volume = float(volbuf) * VOL_MAX / 100.)
+								new_volume[0] = float(volbuf) * VOL_MAX / 100.
 							break
 						else:
 							volbuf += c
@@ -125,9 +129,14 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 		except EOFError:
 			pass
 
-	for filename, volume in playlist:
+	while True:
+
+		filename, volume = playlist.next()
+
 		g_out_reader = None
 		proc = None
+		new_volume[0] = None
+		weight_change = 1
 		try:
 			stdout.write(CLEAR + '\n{}\n\n'.format(playlist.format_entry(filename)))
 			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
@@ -141,12 +150,12 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 				while True:
 					c = read_stdin()
 					if c == 'q':
-						playlist.update(filename, weight=lambda x: x/2.)
+						weight_change *= 0.5
 						proc.stdin.write("q")
 					elif c == 'f':
-						playlist.update(filename, weight=lambda x: x*2.)
+						weight_change *= 2
 					elif c == 'd':
-						playlist.update(filename, weight=lambda x: x/2.)
+						weight_change *= 0.5
 					elif c == 'Q':
 						proc.stdin.write("q")
 						proc.stdin.flush()
@@ -178,7 +187,12 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 				proc.wait()
 			if g_out_reader:
 				g_out_reader.join()
-		if playlist.dirty: playlist.writefile()
+
+		# update playlist: read, update, write to minimize window where races may occur
+		playlist = ptype(playlist.filepath)
+		if weight_change != 1 or new_volume[0] is not None:
+			playlist.update(filename, weight=lambda x: x * weight_change, volume=new_volume[0])
+			playlist.writefile()
 
 
 def main(playlist, ptype=''):
