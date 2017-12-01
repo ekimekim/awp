@@ -140,9 +140,9 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 			try:
 				metadata = getmetadata(filename)
 				lastfm.nowplaying(metadata['title'][0], metadata['artist'][0])
-			except (KeyError, ValueError, IndexError):
+			except (KeyError, ValueError, IndexError) as e:
 				# if it's simply missing fields, ignore
-				pass
+				logging.info("Bad song, missing metadata or could not detect filetype: {}".format(e))
 			except Exception:
 				logging.warning("Failed to set lastfm now playing", exc_info=True)
 
