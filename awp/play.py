@@ -18,6 +18,8 @@ import gevent
 from gevent.select import select
 import os, sys
 import errno
+import logging
+import json
 from importlib import import_module
 from termios import ICANON, ECHO, ECHONL
 
@@ -25,6 +27,7 @@ from escapes import CLEAR
 from termhelpers import TermAttrs
 
 from playlist import Playlist
+from lastfm import LastFM, getmetadata
 
 class RaiseOnExit(object):
 	"""Allows an exception to be raised upon a child exit.
@@ -61,7 +64,7 @@ class RaiseOnExit(object):
 		self.waiter.unlink(self.throw_func)
 
 
-def play(playlist, ptype=Playlist, stdin=None, stdout=None):
+def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 	"""Takes a Playlist and plays forever.
 	Controls (in addition to mplayer standard controls):
 		q: Skip and demote.
@@ -133,6 +136,16 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 
 		filename, volume = playlist.next()
 
+		if lastfm:
+			try:
+				metadata = getmetadata(filename)
+				lastfm.nowplaying(metadata['title'][0], metadata['artist'][0])
+			except (KeyError, ValueError, IndexError):
+				# if it's simply missing fields, ignore
+				pass
+			except Exception:
+				logging.warning("Failed to set lastfm now playing", exc_info=True)
+
 		g_out_reader = None
 		proc = None
 		new_volume[0] = None
@@ -195,12 +208,17 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None):
 			playlist.writefile()
 
 
-def main(playlist, ptype=''):
+def main(playlist, ptype='', lastfm_creds=None, log='INFO'):
+	logging.basicConfig(level=log.upper())
 	kwargs = {}
 	if ptype:
 		module, name = ptype.split(':')
 		module = import_module(module)
 		kwargs['ptype'] = getattr(module, name)
+	if lastfm_creds:
+		creds = json.loads(open(lastfm_creds).read())
+		lastfm = LastFM(**creds)
+		kwargs['lastfm'] = lastfm
 	play(playlist, **kwargs)
 
 
