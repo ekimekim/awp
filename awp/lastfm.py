@@ -1,9 +1,7 @@
 
 import functools
-import importlib
 import md5
 import time
-import os
 import logging
 
 import requests
@@ -64,21 +62,5 @@ class LastFM(object):
 
 
 def getmetadata(filepath):
-	import mutagen.easyid3
-	import mutagen.ogg
-	getinfo_map = {
-		'mp3': lambda: mutagen.easyid3.EasyID3(filepath),
-		'ogg': lambda: mutagen.ogg.OggFileType(open(filepath))
-	}
-	ext_map = {
-		'm4a': 'mp4',
-		'opus': 'ogg',
-	}
-	_, ext = os.path.splitext(filepath)
-	ext = ext.lstrip('.').lower()
-	if ext in ext_map:
-		ext = ext_map[ext]
-	if ext in getinfo_map:
-		return getinfo_map[ext]()
-	module = importlib.import_module('mutagen.{}'.format(ext))
-	return module.Open(filepath)
+	import mutagen
+	return mutagen.File(filepath)
