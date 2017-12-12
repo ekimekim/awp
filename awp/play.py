@@ -135,6 +135,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 	while True:
 
 		filename, volume = playlist.next()
+		original_weight, _ = playlist.entries[filename]
 
 		if lastfm:
 			try:
@@ -151,7 +152,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 		new_volume[0] = None
 		weight_change = 1
 		try:
-			stdout.write(CLEAR + '\n{}\n\n'.format(playlist.format_entry(filename)))
+			stdout.write(CLEAR + '\n{weight}x @{volume}\n{name}\n\n'.format(name=filename, volume=volume, weight=original_weight))
 			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
 						'-volume', str(VOL_FUDGE * volume * 100. / VOL_MAX), filename],
 						 stdin=PIPE, stdout=PIPE, stderr=open('/dev/null','w'))
