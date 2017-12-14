@@ -36,6 +36,7 @@ class LastFM(object):
 		args['method'] = method
 		args['sk'] = self.session_key
 		args['api_key'] = self.api_key
+		args = {uni(k): uni(v) for k, v in args.items()}
 		sig = self.sign(args)
 		args['format'] = 'json'
 		args['api_sig'] = sig
@@ -51,14 +52,26 @@ class LastFM(object):
 		return resp.json()
 
 	def sign(self, args):
-		s = ''.join('{}{}'.format(k, v) for k, v in sorted(args.items()))
-		s += self.api_secret
+		s = ''.join('{}{}'.format(utf8(k), utf8(v)) for k, v in sorted(args.items()))
+		s += utf8(self.api_secret)
 		logging.debug("String to hash: {!r}".format(s))
 		return md5.new(s).hexdigest()
 
 	def nowplaying(self, track, artist):
 		self.call('track.updateNowPlaying', post=True, artist=artist, track=track)
 		logging.info("Successfully set {} - {} as playing".format(track, artist))
+
+
+def utf8(s):
+	return s if isinstance(s, str) else s.encode('utf-8')
+
+def uni(s):
+	if isinstance(s, unicode):
+		return s
+	try:
+		return s.decode('utf-8')
+	except UnicodeDecodeError:
+		return s.decode('latin-1') # arbitrary choice of likely-incorrect encoding that can't fail
 
 
 def getmetadata(filepath):
