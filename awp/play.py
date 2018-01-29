@@ -213,8 +213,22 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 			playlist.writefile()
 
 
-def main(playlist, ptype='', lastfm_creds=None, log='WARNING'):
-	logging.basicConfig(level=log.upper())
+def log_config(level, filepath, filelevel='DEBUG'):
+	format = logging.Formatter('%(asctime)s:%(process)d:%(levelname)s:%(name)s:%(message)s')
+	logger = logging.getLogger()
+	logger.setLevel('DEBUG')
+	stderr = logging.StreamHandler()
+	stderr.setLevel(level)
+	stderr.setFormatter(format)
+	file = logging.FileHandler(filepath)
+	file.setLevel(filelevel)
+	file.setFormatter(format)
+	logger.addHandler(stderr)
+	logger.addHandler(file)
+
+
+def main(playlist, ptype='', lastfm_creds=None, loglevel='WARNING', logfile='/tmp/awp', logfilelevel='DEBUG'):
+	log_config(loglevel, logfile, logfilelevel)
 	kwargs = {}
 	if ptype:
 		module, name = ptype.split(':')
