@@ -75,6 +75,10 @@ def set_lastfm(lastfm, filename):
 		logging.warning("Failed to set lastfm now playing", exc_info=True)
 
 
+def clamp(lower, value, upper):
+	return min(upper, max(lower, value))
+
+
 def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 	"""Takes a Playlist and plays forever.
 	Controls (in addition to mplayer standard controls):
@@ -111,38 +115,6 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 
 	new_volume = [None] # one-element list to force non-local variable
 
-	def out_reader(out, stdout, filename):
-		# This is a turd, please ignore it (it sniffs the output stream for "Volume: X %")
-		def read():
-			c = out.read(1)
-			if not c: raise EOFError
-			return c
-
-		buf = ''
-		try:
-			while True:
-				buf += read()
-				if not 'Volume:'.startswith(buf):
-					stdout.write(buf)
-					stdout.flush()
-					buf = ''
-				elif buf == 'Volume:':
-					volbuf = ''
-					while True:
-						c = read()
-						buf += c
-						if c == '%':
-							if VOL_FUDGE == 1:
-								new_volume[0] = float(volbuf) * VOL_MAX / 100.
-							break
-						else:
-							volbuf += c
-					stdout.write(buf)
-					stdout.flush()
-					buf = ''
-		except EOFError:
-			pass
-
 	while True:
 
 		filename, volume = playlist.next()
@@ -151,17 +123,14 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 		if lastfm:
 			gevent.spawn(set_lastfm, lastfm, filename)
 
-		g_out_reader = None
 		proc = None
-		new_volume[0] = None
+		new_volume = volume
 		weight_change = 1
 		try:
 			stdout.write(CLEAR + '\n{weight}x @{volume}\n{name}\n\n'.format(name=filename, volume=volume, weight=original_weight))
 			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
 						'-volume', str(VOL_FUDGE * volume * 100. / VOL_MAX), filename],
-						 stdin=PIPE, stdout=PIPE, stderr=open('/dev/null','w'))
-
-			g_out_reader = gevent.spawn(out_reader, proc.stdout, stdout, filename)
+						 stdin=PIPE, stderr=open('/dev/null','w'))
 
 			with RaiseOnExit(proc), \
 			     TermAttrs.modify(exclude=(0,0,0,ECHO|ECHONL|ICANON)):
@@ -178,6 +147,15 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 						proc.stdin.write("q")
 						proc.stdin.flush()
 						return
+					elif c in '*/':
+						change = 0.03 * VOL_MAX
+						if c == '/':
+							change = -change
+						new_volume = clamp(0, volume + change, 1)
+						# also write volume change so it takes effect immediately.
+						# note player can exceed 1 volume but we do not.
+						proc.stdin.write(c)
+						proc.stdin.flush()
 					else:
 						# we need to deliver entire escapes at once, or else
 						# mplayer does unexpected things (like quitting)
@@ -203,13 +181,15 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 				except OSError, e:
 					if e.errno != errno.ESRCH: raise
 				proc.wait()
-			if g_out_reader:
-				g_out_reader.join()
+
+		# Don't update volume on VOL_FUDGE
+		if VOL_FUDGE != 1:
+			new_volume = volume
 
 		# update playlist: read, update, write to minimize window where races may occur
 		playlist = ptype(playlist.filepath)
-		if weight_change != 1 or new_volume[0] is not None:
-			playlist.update(filename, weight=lambda x: x * weight_change, volume=new_volume[0])
+		if weight_change != 1 or new_volume != volume:
+			playlist.update(filename, weight=lambda x: x * weight_change, volume=new_volume)
 			playlist.writefile()
 
 
