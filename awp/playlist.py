@@ -1,6 +1,7 @@
 from rand import weighted_choice
 from collections import OrderedDict
 import os
+import re
 
 class Playlist(object):
 	"""Playlist files are newline-seperated records of one song per line.
@@ -92,9 +93,12 @@ class Playlist(object):
 	def __iter__(self):
 		return self
 
-	def next(self):
-		"""Get next thing to play. Returns (path, volume)"""
-		weights = { (path, volume) : weight for path, (weight, volume) in self.entries.items() }
+	def next(self, file_regex=None):
+		"""Get next thing to play (optionally, with path matching regex). Returns (path, volume)"""
+		weights = {
+			(path, volume): weight for path, (weight, volume) in self.entries.items()
+			if file_regex is None or re.search(file_regex, path)
+		}
 		return weighted_choice(weights)
 
 	def copy(self):

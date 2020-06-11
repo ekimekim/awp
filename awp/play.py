@@ -80,7 +80,7 @@ def clamp(lower, value, upper):
 	return min(upper, max(lower, value))
 
 
-def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
+def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_regex=None):
 	"""Takes a Playlist and plays forever.
 	Controls (in addition to mplayer standard controls):
 		q: Skip and demote.
@@ -91,6 +91,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 	All promotions and demotions double/halve the weighting.
 	ptype is the Playlist subtype to use if paylist is string.
 	ptype may be string, in which case it should be "module:name" to import
+	Will only play files matching file_regex.
 	"""
 
 	if not stdin:
@@ -120,7 +121,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None):
 
 	while True:
 
-		filename, volume = playlist.next()
+		filename, volume = playlist.next(file_regex=file_regex)
 		original_weight, _ = playlist.entries[filename]
 
 		if lastfm:
@@ -216,7 +217,7 @@ def log_config(level, filepath, filelevel='DEBUG'):
 	logger.addHandler(file)
 
 
-def main(playlist, ptype='', lastfm_creds=None, loglevel='WARNING', logfile='/tmp/awp', logfilelevel='DEBUG'):
+def main(playlist, ptype='', lastfm_creds=None, loglevel='WARNING', logfile='/tmp/awp', logfilelevel='DEBUG', file_regex=None):
 	log_config(loglevel, logfile, logfilelevel)
 	kwargs = {}
 	if ptype:
@@ -227,7 +228,7 @@ def main(playlist, ptype='', lastfm_creds=None, loglevel='WARNING', logfile='/tm
 		creds = json.loads(open(lastfm_creds).read())
 		lastfm = LastFM(**creds)
 		kwargs['lastfm'] = lastfm
-	play(playlist, **kwargs)
+	play(playlist, file_regex=file_regex, **kwargs)
 
 
 if __name__ == '__main__':
