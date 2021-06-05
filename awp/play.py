@@ -14,8 +14,9 @@ In less concrete terms, this solution is "hacky" and possibly less reliable.
 """
 
 from gevent.subprocess import Popen, PIPE
-import gevent
+import gevent.queue
 from gevent.select import select
+from gevent import socket
 import os, sys
 import errno
 import logging
@@ -80,7 +81,7 @@ def clamp(lower, value, upper):
 	return min(upper, max(lower, value))
 
 
-def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_regex=None):
+def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_regex=None, control_sock=None):
 	"""Takes a Playlist and plays forever.
 	Controls (in addition to mplayer standard controls):
 		q: Skip and demote.
@@ -99,13 +100,35 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_re
 	if not stdout:
 		stdout = sys.stdout
 
+	input_queue = gevent.queue.Queue()
+
 	# We can't guarentee stdin is gevent-safe, and using a FileObject
 	# wrapper leaves it in non-blocking mode after exit.
 	def read_stdin():
 		while True:
 			r, w, x = select([stdin], [], [])
 			if stdin in r:
-				return stdin.read(1)
+				c = stdin.read(1)
+				input_queue.put(c)
+
+	def control_sock_accept():
+		while True:
+			client, addr = control_sock.accept()
+			gevent.spawn(read_control_sock, client)
+
+	def read_control_sock(client):
+		c = client.recv(1)
+		while c:
+			input_queue.put(c)
+			c = client.recv(1)
+		client.close()
+
+	def get_input(timeout=None):
+		return input_queue.get(timeout=timeout)
+
+	gevent.spawn(read_stdin)
+	if control_sock:
+		gevent.spawn(control_sock_accept)
 
 	if isinstance(playlist, str):
 		playlist = ptype(playlist)
@@ -139,7 +162,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_re
 			with RaiseOnExit(proc), \
 			     TermAttrs.modify(exclude=(0,0,0,ECHO|ECHONL|ICANON)):
 				while True:
-					c = read_stdin()
+					c = get_input()
 					if c == 'q':
 						weight_change *= 0.5
 						proc.stdin.write("q")
@@ -159,22 +182,23 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_re
 						# also write volume change so it takes effect immediately.
 						# note player can exceed 1 volume but we do not.
 						proc.stdin.write(c)
-						proc.stdin.flush()
 					elif c == 'r':
 						if rainymood:
 							rainymood.kill(block=False)
 							rainymood = None
 						else:
 							rainymood = spawn_rainymood()
-					else:
+					elif c == '\x1b':
 						# we need to deliver entire escapes at once, or else
 						# mplayer does unexpected things (like quitting)
 						# so we read the entire available input before acting
 						while True:
-							r, w, x = select([stdin], [], [], 0)
-							if not r:
+							try:
+								c += get_input(timeout=0.1)
+							except gevent.queue.Empty:
 								break
-							c += read_stdin()
+						proc.stdin.write(c)
+					else:
 						proc.stdin.write(c)
 					proc.stdin.flush()
 
@@ -217,7 +241,7 @@ def log_config(level, filepath, filelevel='DEBUG'):
 	logger.addHandler(file)
 
 
-def main(playlist, ptype='', lastfm_creds=None, loglevel='WARNING', logfile='/tmp/awp', logfilelevel='DEBUG', file_regex=None):
+def main(playlist, ptype='', lastfm_creds=None, loglevel='WARNING', logfile='/tmp/awp', logfilelevel='DEBUG', file_regex=None, control_path=None):
 	log_config(loglevel, logfile, logfilelevel)
 	kwargs = {}
 	if ptype:
@@ -228,6 +252,17 @@ def main(playlist, ptype='', lastfm_creds=None, loglevel='WARNING', logfile='/tm
 		creds = json.loads(open(lastfm_creds).read())
 		lastfm = LastFM(**creds)
 		kwargs['lastfm'] = lastfm
+	if control_path:
+		# Delete existing if it exists
+		try:
+			os.remove(control_path)
+		except EnvironmentError as e:
+			if e.errno != errno.ENOENT:
+				raise
+		control_sock = socket.socket(socket.AF_UNIX)
+		control_sock.bind(control_path)
+		control_sock.listen(128)
+		kwargs['control_sock'] = control_sock
 	play(playlist, file_regex=file_regex, **kwargs)
 
 
