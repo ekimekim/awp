@@ -155,16 +155,19 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_re
 		weight_change = 1
 		try:
 			stdout.write(CLEAR + '\n{weight}x @{volume}\n{name}\n\n'.format(name=filename, volume=volume, weight=original_weight))
-			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
-						'-volume', str(VOL_FUDGE * volume * 100. / VOL_MAX), filename],
+			proc = Popen(['setsid', 'mpv', '--vo=null', '--volume-max={}'.format(VOL_MAX * 100.),
+						'--volume={}'.format(VOL_FUDGE * volume * 100. / VOL_MAX), filename],
 						 stdin=PIPE, stderr=open('/dev/null','w'))
 
 			with RaiseOnExit(proc), \
 			     TermAttrs.modify(exclude=(0,0,0,ECHO|ECHONL|ICANON)):
 				while True:
 					c = get_input()
+					logging.debug("read {!r}".format(c))
 					if c == 'q':
 						weight_change *= 0.5
+						proc.stdin.write("q")
+					elif c == '\n':
 						proc.stdin.write("q")
 					elif c == 'f':
 						weight_change *= 2
