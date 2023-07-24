@@ -23,6 +23,7 @@ import logging
 import json
 from importlib import import_module
 from termios import ICANON, ECHO, ECHONL
+from pipes import quote
 
 from escapes import CLEAR
 from termhelpers import TermAttrs
@@ -81,7 +82,7 @@ def clamp(lower, value, upper):
 	return min(upper, max(lower, value))
 
 
-def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_regex=None, control_sock=None, force_ext=None):
+def play(playlist, ptype=Playlist, stdout=None, lastfm=None, file_regex=None, control_sock=None, force_ext=None):
 	"""Takes a Playlist and plays forever.
 	Controls (in addition to mplayer standard controls):
 		q: Skip and demote.
@@ -96,8 +97,6 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_re
 	force_ext will make it act as though all files had that extension
 	"""
 
-	if not stdin:
-		stdin = sys.stdin
 	if not stdout:
 		stdout = sys.stdout
 
@@ -105,11 +104,16 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_re
 
 	# We can't guarentee stdin is gevent-safe, and using a FileObject
 	# wrapper leaves it in non-blocking mode after exit.
+	# Even using the sys.stdin wrapper causes problems due to the internal buffer
+	# interacting with select(). We force a raw OS-level read() call.
 	def read_stdin():
+		stdin = sys.stdin.fileno()
 		while True:
 			r, w, x = select([stdin], [], [])
+			logging.debug("Got r = {!r}".format(r))
 			if stdin in r:
-				c = stdin.read(1)
+				c = os.read(stdin, 1)
+				logging.debug("Put {!r}".format(c))
 				input_queue.put(c)
 
 	def control_sock_accept():
@@ -159,11 +163,14 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_re
 			stdout.write(CLEAR + '\n{weight}x @{volume}\n{name}\n\n'.format(name=filename, volume=volume, weight=original_weight))
 			args = [
 				'mpv',
-				'--vo=null',
+				'--msg-level=cplayer=warn,display-tags=warn',
+				'--audio-display=no',
 				'--volume-max={}'.format(VOL_MAX * 100.),
-				'--volume={}'.format(VOL_FUDGE * volume * 100. / VOL_MAX),
+				'--volume={}'.format(VOL_FUDGE * volume * 100.),
 				real_filename,
 			]
+			args = " ".join(map(quote, args))
+			args = ["ssh", "-tt", "localhost", args]
 			proc = Popen(args, stdin=PIPE, stderr=open('/dev/null','w'))
 
 			with RaiseOnExit(proc), \
@@ -185,10 +192,11 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_re
 						proc.stdin.flush()
 						return
 					elif c in '*/':
-						change = 0.03 * VOL_MAX
+						change = 0.02
 						if c == '/':
 							change = -change
-						new_volume = clamp(0, volume + change, 1)
+						new_volume = clamp(0, new_volume + change, VOL_MAX)
+						logging.debug("vol +{} -> {}".format(change, new_volume))
 						# also write volume change so it takes effect immediately.
 						# note player can exceed 1 volume but we do not.
 						proc.stdin.write(c)
@@ -226,6 +234,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_re
 					if e.errno != errno.ESRCH: raise
 				proc.wait()
 
+		logging.debug("Volume: {} -> {}".format(volume, new_volume))
 		# Don't update volume on VOL_FUDGE
 		if VOL_FUDGE != 1:
 			new_volume = volume
