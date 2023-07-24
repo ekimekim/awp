@@ -81,7 +81,7 @@ def clamp(lower, value, upper):
 	return min(upper, max(lower, value))
 
 
-def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_regex=None, control_sock=None):
+def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_regex=None, control_sock=None, force_ext=None):
 	"""Takes a Playlist and plays forever.
 	Controls (in addition to mplayer standard controls):
 		q: Skip and demote.
@@ -93,6 +93,7 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_re
 	ptype is the Playlist subtype to use if paylist is string.
 	ptype may be string, in which case it should be "module:name" to import
 	Will only play files matching file_regex.
+	force_ext will make it act as though all files had that extension
 	"""
 
 	if not stdin:
@@ -154,9 +155,10 @@ def play(playlist, ptype=Playlist, stdin=None, stdout=None, lastfm=None, file_re
 		new_volume = volume
 		weight_change = 1
 		try:
+			real_filename = filename if force_ext is None else filename.rsplit('.', 1)[0] + '.' + force_ext
 			stdout.write(CLEAR + '\n{weight}x @{volume}\n{name}\n\n'.format(name=filename, volume=volume, weight=original_weight))
 			proc = Popen(['mplayer', '-vo', 'none', '-softvol', '-softvol-max', str(VOL_MAX * 100.),
-						'-volume', str(VOL_FUDGE * volume * 100. / VOL_MAX), filename],
+						'-volume', str(VOL_FUDGE * volume * 100. / VOL_MAX), real_filename],
 						 stdin=PIPE, stderr=open('/dev/null','w'))
 
 			with RaiseOnExit(proc), \
@@ -241,7 +243,7 @@ def log_config(level, filepath, filelevel='DEBUG'):
 	logger.addHandler(file)
 
 
-def main(playlist, ptype='', lastfm_creds=None, loglevel='WARNING', logfile='/tmp/awp', logfilelevel='DEBUG', file_regex=None, control_path=None):
+def main(playlist, ptype='', lastfm_creds=None, loglevel='WARNING', logfile='/tmp/awp', logfilelevel='DEBUG', file_regex=None, control_path=None, force_ext=None):
 	log_config(loglevel, logfile, logfilelevel)
 	kwargs = {}
 	if ptype:
@@ -263,7 +265,7 @@ def main(playlist, ptype='', lastfm_creds=None, loglevel='WARNING', logfile='/tm
 		control_sock.bind(control_path)
 		control_sock.listen(128)
 		kwargs['control_sock'] = control_sock
-	play(playlist, file_regex=file_regex, **kwargs)
+	play(playlist, file_regex=file_regex, force_ext=force_ext, **kwargs)
 
 
 if __name__ == '__main__':
